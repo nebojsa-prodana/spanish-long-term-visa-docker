@@ -28,7 +28,7 @@ if [ -d "$CERT_DIR" ]; then
   
   # Initialize legacy NSS database (Firefox ESR 52 compatibility)
   if [ ! -f "$FF_CERTDB/cert8.db" ]; then
-    printf '\n\n' | certutil -N -d "$FF_NSS_DB" 2>/dev/null || true
+    certutil -N -d "$FF_NSS_DB" --empty-password 2>/dev/null || true
     echo "✓ Legacy certificate database initialized"
   fi
   
@@ -50,7 +50,7 @@ Xvfb :0 -screen 0 1280x800x24 >/dev/null 2>&1 &
 sleep 2
 dbus-launch openbox >/dev/null 2>&1 &
 sleep 1
-x11vnc -display :0 -nopw -forever -quiet -shared >/dev/null 2>&1 &
+x11vnc -display :0 -nopw -forever -shared -ncache 10 -ncache_cr -defer 1 >/dev/null 2>&1 &
 python3 -m websockify --web=/usr/share/novnc 8080 localhost:5900 >/dev/null 2>&1 &
 
 sleep 3

@@ -4,6 +4,17 @@
 
 This repository contains a Docker-based workaround for applying for long-term residency in Spain through the official government website. Unfortunately, the Spanish government's digital signature system is severely outdated and insecure, requiring obsolete browser technology that modern systems no longer support.
 
+## Why This Exists
+
+This workaround exists because:
+
+1. **Government Negligence**: Spanish authorities have failed to update their systems for over 15 years
+2. **Technical Debt**: The system was built with obsolete technology and never modernized  
+3. **User Impact**: Citizens are forced to use insecure software to access government services
+4. **Digital Divide**: Modern computers cannot access basic government services
+
+This is a clear failure of digital governance and puts citizens at risk by forcing them to use vulnerable software.
+
 ## The Problem
 
 The Spanish government's visa application system has not been updated in over a decade and requires:
@@ -16,8 +27,6 @@ The Spanish government's visa application system has not been updated in over a 
 ![Spanish Government System Requirements](requirements-screenshot.png)
 
 *Screenshot showing the outdated system requirements from the official Spanish government website*
-
-> **Note**: Save the attached requirements screenshot as `requirements-screenshot.png` in this directory to display the image above.
 
 As shown in the official requirements above, the system demands:
 - JRE 6 update 17 or higher (released in 2009!)
@@ -40,9 +49,47 @@ This Docker container provides a legacy environment with:
 
 - Docker
 - Web browser (for VNC access)
-- Your digital certificate files (.p12 or .pfx format)
+- **Spanish Digital Certificate** (.p12 or .pfx format) - **REQUIRED**
 
 **Note for Apple Silicon (M1/M2/M3) Macs**: This container uses AMD64 architecture (`--platform=linux/amd64`) because Java 7 and legacy browser plugins were never built for ARM64. Docker will automatically use Rosetta translation on Apple Silicon Macs.
+
+## Prerequisites: Digital Certificate Required
+
+⚠️ **IMPORTANT**: This tool requires a Spanish digital certificate to function. You cannot proceed with visa applications without it.
+
+### How to Obtain Your Digital Certificate
+
+If you don't have a Spanish digital certificate yet, you need to obtain one through official Spanish government channels. The most common methods are:
+
+1. **DNI Electrónico (Electronic ID Card)**:
+   - Schedule an appointment for DNI renewal/issuance: **https://www.citapreviadnie.es/citaPreviaDni/**
+   - The electronic DNI includes digital certificates for authentication and signing
+   - Check requirements at www.dnielectronico.es
+
+2. **FNMT-RCM (Fábrica Nacional de Moneda y Timbre)**:
+   - Visit their official website for digital certificate services
+   - Available for Spanish citizens and residents
+
+**Note**: The process and requirements for obtaining digital certificates can be complex and may vary based on your residency status and location. Please consult official Spanish government websites or contact Spanish consulates for accurate, up-to-date information about digital certificate requirements for your specific situation.
+
+**Without a valid Spanish digital certificate, the government website will not allow you to digitally sign documents or complete visa applications.**
+
+### About cl@ve
+
+**cl@ve is not supported by this tool.** This container is specifically designed to work with digital certificate files (.p12/.pfx format) and the AutoFirma application. The Spanish government website requires traditional digital certificates for the digital signature process needed in visa applications.
+
+### Security Considerations
+
+⚠️ **WARNING**: This container deliberately uses outdated, vulnerable software to work around Spanish government incompetence. Use only for visa applications and in isolated environments.
+
+- Firefox ESR 52 has known security vulnerabilities
+- Java browser plugins are deprecated for security reasons
+- The container should not be used for general browsing
+- Only use on trusted networks
+- Consider using a dedicated VM for additional isolation
+
+The container uses **legacy NSS database format (cert8.db)** instead of the modern format (cert9.db) because Firefox ESR 52 prefers the legacy format for certificate visibility. This ensures your digital certificates appear correctly in Firefox Certificate Manager.
+
 
 ## Quick Start
 
@@ -65,6 +112,8 @@ This Docker container provides a legacy environment with:
    make run
    ```
 
+   ⚠️ **Important**: During startup, the container will prompt you to enter the password for your digital certificate (.p12/.pfx file). This is required to import your certificate into Firefox. You will see this prompt in the terminal where you ran `make run`.
+
 4. **Access the GUI:**
    - Open your web browser
    - Go to: `http://localhost:8080/vnc.html`
@@ -85,24 +134,7 @@ docker exec -it autofirma-legacy bash
 
 ### Available Commands in Container
 
-Type `visa-help` for a complete list of available commands:
-
-**Website Access:**
-- `firefox-spanish` - Open Spanish visa website
-- `vnc-web` - Show VNC web access URL
-
-**Certificate Management:**
-- `cert-list` - List all certificates in Firefox
-- `cert-verify` - Show personal certificates only
-- `cert-import-help` - Show how to import certificates
-- `cert-debug` - Debug certificate database issues
-
-**System Diagnostics:**
-- `java-test` - Test Java installation
-- `firefox-test` - Test Firefox installation
-- `autofirma-test` - Test AutoFirma installation
-- `display-test` - Test X11 display
-- `smoke-test` - Run complete system validation
+Type `visa-help` for a complete list of available commands
 
 ### Certificate Import Process
 
@@ -112,9 +144,12 @@ The container automatically imports certificates from the `certs/` directory usi
 
 **Import process:**
 1. Place certificate files in the `certs/` directory
-2. Start/restart the container
-3. Certificates are automatically imported into Firefox
-4. Verify import with: `cert-list`
+2. Start/restart the container with `make run`
+3. **Enter your certificate password when prompted** (this appears in the terminal)
+4. Certificates are automatically imported into Firefox
+5. Verify import with: `cert-list`
+
+**Note:** The certificate password is needed to decrypt your .p12/.pfx file during import. This is a one-time setup step.
 
 **Manual certificate import:**
 ```bash
@@ -144,59 +179,11 @@ cert-import-manual /certs/your-certificate.p12
 - Test AutoFirma: `autofirma-test`
 - Check system info: `system-info`
 
-## Technical Details
-
-### Architecture Notes
-- **Platform**: AMD64 architecture for legacy Java compatibility
-- **Base**: Ubuntu 20.04 LTS
-- **Java**: OpenJDK 11 (compatible with Java 7 applets)
-- **Browser**: Firefox ESR 52.9.0 (last NPAPI-compatible version)
-- **Certificate Database**: Legacy NSS format (cert8.db) for Firefox ESR 52
-- **Desktop**: Minimal Openbox window manager
-- **Remote Access**: VNC + noVNC for web-based GUI
-- **Environment**: Single troubleshooting script sourced in .bashrc handles all setup
-
-### Certificate Database Format
-
-The container uses **legacy NSS database format (cert8.db)** instead of the modern format (cert9.db) because Firefox ESR 52 prefers the legacy format for certificate visibility. This ensures your digital certificates appear correctly in Firefox Certificate Manager.
-
-### Security Considerations
-
-⚠️ **WARNING**: This container deliberately uses outdated, vulnerable software to work around Spanish government incompetence. Use only for visa applications and in isolated environments.
-
-- Firefox ESR 52 has known security vulnerabilities
-- Java browser plugins are deprecated for security reasons
-- The container should not be used for general browsing
-- Only use on trusted networks
-- Consider using a dedicated VM for additional isolation
-
-## File Structure
-
-```
-├── Dockerfile            # Container with legacy software stack
-├── Makefile              # Build and run automation with retry logic
-├── start.sh              # Simplified container initialization script
-├── troubleshoot.sh       # Troubleshooting tools and commands
-├── smoketest.sh          # System validation and health checks
-├── configure-firefox.sh  # Firefox configuration (disable updates, dialogs)
-├── README.md             # This documentation
-└── certs/                # Directory for your .p12/.pfx certificate files
-```
-
-## Why This Exists
-
-This workaround exists because:
-
-1. **Government Negligence**: Spanish authorities have failed to update their systems for over 15 years
-2. **Technical Debt**: The system was built with obsolete technology and never modernized  
-3. **User Impact**: Citizens are forced to use insecure software to access government services
-4. **Digital Divide**: Modern computers cannot access basic government services
-
-This is a clear failure of digital governance and puts citizens at risk by forcing them to use vulnerable software.
-
 ## License
 
-This project is provided as-is for educational and necessity purposes. The authors are not responsible for any issues arising from the use of deliberately outdated software components.
+MIT License - This project is free to use, modify, and distribute. See LICENSE file for details.
+
+**Disclaimer**: The authors are not responsible for any issues arising from the use of deliberately outdated software components required to work around Spanish government technical incompetence.
 
 ## Contributing
 
@@ -204,4 +191,4 @@ If you discover improvements or fixes, please contribute back to help other vict
 
 ---
 
-*"The best time to modernize government IT was 20 years ago. The second best time is now."*
+*"Spanish bureaucracy: Where nepotism meets Windows XP, and both are somehow still running the country."*
