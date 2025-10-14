@@ -107,8 +107,8 @@ The container employs **legacy NSS database format (cert8.db)** for Firefox ESR 
 
 1. **Clone this repository:**
    ```bash
-   git clone <this-repo-url>
-   cd long-term-visa
+   git clone https://github.com/nebojsa-prodana/spanish-long-term-visa-docker.git
+   cd spanish-long-term-visa-docker
    ```
 
 2. **Add your Spanish digital certificate:**
@@ -122,6 +122,7 @@ The container employs **legacy NSS database format (cert8.db)** for Firefox ESR 
    ```bash
    make run
    ```
+   This pulls the latest pre-built image from GitHub Container Registry.
 
 4. **Open the browser interface:**
    - Navigate to: `http://localhost:8080/vnc.html`
@@ -138,10 +139,22 @@ The container employs **legacy NSS database format (cert8.db)** for Firefox ESR 
    ```
    This removes the container and cleans up Docker resources.
 
+## Advanced Usage
+
+**For Development/Custom Builds:**
+If you need to build the image locally instead of using the pre-built one:
+```bash
+make build-and-run
+```
+
 ## Usage Commands
 
 **Normal Usage:**
 Just navigate to `http://localhost:8080/vnc.html` in your browser and use the Spanish government website through Firefox.
+
+**Getting Started:**
+- `make run` - Pull and run the latest pre-built image
+- `make build-and-run` - Build locally and run (for development)
 
 **When Finished:**
 Run `make clean` to remove the container and free up system resources.
