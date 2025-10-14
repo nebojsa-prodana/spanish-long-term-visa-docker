@@ -1,0 +1,18 @@
+# Certificate files - NEVER commit these!
+*.p12
+*.pfx
+*.crt
+*.cer
+*.pem
+
+# But allow the README in certs directory
+!certs/README.md
+
+# Docker artifacts
+.docker/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

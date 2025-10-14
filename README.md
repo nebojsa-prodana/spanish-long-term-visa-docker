@@ -2,48 +2,47 @@
 
 ## Overview
 
-This repository contains a Docker-based workaround for applying for long-term residency in Spain through the official government website. Unfortunately, the Spanish government's digital signature system is severely outdated and insecure, requiring obsolete browser technology that modern systems no longer support.
+This repository contains a Docker-based workaround for Spain's breathtakingly progressive government website - a masterful tribute to 2009 featuring exquisitely outdated, deliciously insecure browser technology that modern systems have rather rudely abandoned.
 
-## Why This Exists
+**Website in question**: https://sede.administracionespublicas.gob.es/ (Spanish government digital services portal)
 
-This workaround exists because:
+This magnificent digital archaeology represents the pinnacle of **nepomancy**.
 
-1. **Government Negligence**: Spanish authorities have failed to update their systems for over 15 years
-2. **Technical Debt**: The system was built with obsolete technology and never modernized  
-3. **User Impact**: Citizens are forced to use insecure software to access government services
-4. **Digital Divide**: Modern computers cannot access basic government services
+**nepomancy** /ˈnepəˌmænsɪ/ *noun* (informal, derogatory)
 
-This is a clear failure of digital governance and puts citizens at risk by forcing them to use vulnerable software.
+**1.** The dark art of combining nepotistic appointments with spectacular incompetence to create public services that defy both logic and functionality.
+
+**2.** A system of governance where family connections supersede qualifications, resulting in multigenerational technological dysfunction.
+
+**3.** The mystical practice of transforming taxpayer funds into hereditary contractor profits while delivering Stone Age technology.
+
+*Etymology: nepo- (from nepotism) + -mancy (divination/magic). First observed in Spanish governmental IT procurement, circa 2009.*
+
+**Disclaimer**: This system represents genuine institutional nepomancy - not satire. A digital monument to nepotistic procurement and hereditary incompetence that costs Spanish taxpayers millions annually while delivering Stone Age technology through multigenerational contractor bloodlines.
 
 ## The Problem
 
-The Spanish government's visa application system has not been updated in over a decade and requires:
-
-- **Java Runtime Environment (JRE) 6/7** with browser plugin support
-- **Legacy browsers** that support NPAPI plugins (deprecated since 2015)
-- **Outdated operating systems** (Windows 2000/XP/Vista/7)
-- **Ancient browser versions** that have known security vulnerabilities
+Spain's government has achieved the impossible: creating a visa system so magnificently broken it requires archaeological software to function. These technological visionaries insist on:
 
 ![Spanish Government System Requirements](requirements-screenshot.png)
+*Official Spanish government website requirements - genuinely demanding 2009-era software*
 
-*Screenshot showing the outdated system requirements from the official Spanish government website*
+- **Java Runtime Environment (JRE) 6/7** - Artisanal software with more security holes than Swiss cheese
+- **Legacy browsers** supporting NPAPI plugins (deprecated 2015 for being malware delivery systems, but Spain recognises quality)  
+- **Heritage operating systems** (Windows 2000/XP/Vista/7) - OS versions predating smartphones, because progress is terribly vulgar
+- **Ancient browsers** with vulnerabilities so numerous they'd make medieval siege warfare look secure
 
-As shown in the official requirements above, the system demands:
-- JRE 6 update 17 or higher (released in 2009!)
-- Internet Explorer 7+ or very old versions of Firefox/Chrome
-- Support for Java applets in browsers (deprecated technology)
-
-Modern browsers have completely removed support for Java plugins due to security concerns, making it impossible to complete the digital signature process required for visa applications.
+Modern browsers sensibly purged Java plugin support years ago. Spain graciously permits authentic governmental computing by forcing you to install digital time bombs just to fill out forms.
 
 ## The Solution
 
-This Docker container provides a legacy environment with:
+**Fear not.** Here you have a digital containment facility for this radioactive Spanish malware. This Docker container serves as your hazmat suit, isolating the toxic 2009-era software whilst keeping your actual computer safely in this century:
 
-- **Ubuntu 20.04** base system (AMD64 architecture for legacy compatibility)
-- **OpenJDK 8** with browser plugin support (compatible with Java 7 applets)
-- **Firefox ESR 52** (the last version to support NPAPI plugins)
-- **AutoFirma 1.9** (Spanish government's digital signature tool)
-- **VNC access** through web browser for remote GUI interaction
+- **Ubuntu 20.04** (AMD64 - ARM processors weren't enlightened enough for 2009)
+- **OpenJDK 8** with browser necromancy (the final JRE before antivirus software intervened)
+- **Firefox ESR 52** (archaeologically preserved from the epoch of blissful vulnerability)
+- **AutoFirma 1.9** (Spain's digital signature tool, reliable as a chocolate teapot)
+- **VNC access** (direct contact would constitute digital suicide)
 
 ## System Requirements
 
@@ -80,15 +79,28 @@ If you don't have a Spanish digital certificate yet, you need to obtain one thro
 
 ### Security Considerations
 
-⚠️ **WARNING**: This container deliberately uses outdated, vulnerable software to work around Spanish government incompetence. Use only for visa applications and in isolated environments.
+⚠️ **Important Security Notice**: This container runs deliberately outdated software with known security vulnerabilities that are required by the Spanish government system.
 
-- Firefox ESR 52 has known security vulnerabilities
-- Java browser plugins are deprecated for security reasons
-- The container should not be used for general browsing
-- Only use on trusted networks
-- Consider using a dedicated VM for additional isolation
+**Security Risks of Required Software:**
+- **Firefox ESR 52** (2017) contains numerous unpatched security vulnerabilities
+- **Java 8 browser plugins** have well-documented security flaws and are disabled by default in modern browsers
+- **Legacy certificate handling** uses deprecated NSS database format (cert8.db)
+- **NPAPI plugin support** creates attack vectors that modern browsers have eliminated
 
-The container uses **legacy NSS database format (cert8.db)** instead of the modern format (cert9.db) because Firefox ESR 52 prefers the legacy format for certificate visibility. This ensures your digital certificates appear correctly in Firefox Certificate Manager.
+**Docker Security Containment:**
+- All vulnerable software runs **isolated within the container** - your host system remains protected
+- Container filesystem is **ephemeral** - no persistent changes to your actual computer
+- Network access is **limited to VNC port** and necessary government sites
+- **No direct access** to your host system files or other applications
+- When you delete the container, **all traces of the legacy software are removed**
+
+**Best Practices:**
+- Only use this container for Spanish government visa applications
+- Do not browse other websites or install additional software in the container
+- Certificate files are automatically gitignored to prevent accidental commits
+- Regularly update the container to get the latest security patches for the base Ubuntu system
+
+The container employs **legacy NSS database format (cert8.db)** for Firefox ESR 52 compatibility. **Docker ensures complete isolation of these deprecated components.**
 
 
 ## Quick Start
@@ -99,96 +111,92 @@ The container uses **legacy NSS database format (cert8.db)** instead of the mode
    cd long-term-visa
    ```
 
-2. **Place your digital certificates:**
+2. **Add your Spanish digital certificate:**
    ```bash
-   mkdir certs
-   # Copy your .p12 or .pfx certificate files to the certs/ directory
    cp /path/to/your-certificate.p12 certs/
    ```
+   
+   ⚠️ **Note**: Certificate files are gitignored for security.
 
-3. **Build and run the container:**
+3. **Start the container:**
    ```bash
-   make build
    make run
    ```
 
-   ⚠️ **Important**: During startup, the container will prompt you to enter the password for your digital certificate (.p12/.pfx file). This is required to import your certificate into Firefox. You will see this prompt in the terminal where you ran `make run`.
+4. **Open the browser interface:**
+   - Navigate to: `http://localhost:8080/vnc.html`
+   - Click "Connect"
 
-4. **Access the GUI:**
-   - Open your web browser
-   - Go to: `http://localhost:8080/vnc.html`
-   - Click "Connect" (no password required)
+5. **Use the Spanish government website:**
+   - Firefox will open with the government portal
+   - Your certificates will be automatically imported
+   - Complete your visa application
 
-5. **Use Firefox for visa application:**
-   - Firefox will open automatically with the Spanish government website
-   - Your certificates will be available in Firefox Certificate Manager
-   - Proceed with your visa application
+6. **Clean up when finished:**
+   ```bash
+   make clean
+   ```
+   This removes the container and cleans up Docker resources.
 
 ## Usage Commands
 
-Once the container is running, you can open a shell for troubleshooting:
+**Normal Usage:**
+Just navigate to `http://localhost:8080/vnc.html` in your browser and use the Spanish government website through Firefox.
 
+**When Finished:**
+Run `make clean` to remove the container and free up system resources.
+
+**For Troubleshooting:**
+If you need diagnostics or manual intervention, open a terminal in the container:
 ```bash
-docker exec -it autofirma-legacy bash
+make shell
 ```
 
-### Available Commands in Container
+Type `visa-help` for comprehensive troubleshooting commands and diagnostic tools.
 
-Type `visa-help` for a complete list of available commands
+**Important**: All operations happen inside the container - your host system remains unaffected.
 
-### Certificate Import Process
+### Certificate Management
 
-The container automatically imports certificates from the `certs/` directory using **legacy NSS database format (cert8.db)** for Firefox ESR 52 compatibility.
+**Automatic Import:**
+The container automatically discovers and imports certificates from the `certs/` directory during startup.
 
-**Supported formats:** `.p12`, `.pfx`
+**Steps:**
+1. Place your certificate file in the `certs/` directory before starting the container
+2. Run `make run` 
+3. Enter your certificate passphrase when prompted
+4. Verify import with: `cert-list`
 
-**Import process:**
-1. Place certificate files in the `certs/` directory
-2. Start/restart the container with `make run`
-3. **Enter your certificate password when prompted** (this appears in the terminal)
-4. Certificates are automatically imported into Firefox
-5. Verify import with: `cert-list`
+**Manual Import:**
+If automatic import fails: `cert-import-manual /certs/your-certificate.p12`
 
-**Note:** The certificate password is needed to decrypt your .p12/.pfx file during import. This is a one-time setup step.
-
-**Manual certificate import:**
-```bash
-# Inside the container
-cert-import-manual /certs/your-certificate.p12
-```
+**Firefox Certificate Import:**
+Certificates can also be imported through Firefox:
+1. Go to `Edit → Preferences → Advanced → Certificates → View Certificates`
+2. Click the `Authorities` tab
+3. Click `Import` and select your certificate file
+4. Check the appropriate trust settings
 
 ## Troubleshooting
 
-### Certificate Not Visible in Firefox
-- Check certificate import: `cert-debug`
-- Verify database format: Firefox ESR 52 uses legacy cert8.db format
-- Manual import: `cert-import-manual /certs/your-cert.p12`
+If something doesn't work as expected:
 
-### Firefox Cannot Access Certificates
-- Ensure you're using the legacy database format (handled automatically)
-- Check Firefox profile: `firefox-profile`
-- Restart Firefox: `pkill firefox && firefox-spanish`
+1. **First**: Try refreshing the browser or restarting the container with `make run`
 
-### VNC Connection Issues
-- Ensure port 8080 is available: `lsof -i :8080`
-- Check VNC services: `display-test`
-- Restart container if needed: `docker restart autofirma-legacy`
+2. **For detailed diagnostics**: Open a terminal in the container:
+   ```bash
+   make shell
+   ```
+   
+3. **Follow the built-in help**: Type `visa-help` in the container terminal for comprehensive troubleshooting commands and diagnostics
 
-### Java/AutoFirma Problems
-- Test Java: `java-test`
-- Test AutoFirma: `autofirma-test`
-- Check system info: `system-info`
+The container includes extensive diagnostic tools and step-by-step troubleshooting guidance accessible through the terminal welcome page.
 
-## License
-
-MIT License - This project is free to use, modify, and distribute. See LICENSE file for details.
-
-**Disclaimer**: The authors are not responsible for any issues arising from the use of deliberately outdated software components required to work around Spanish government technical incompetence.
 
 ## Contributing
 
-If you discover improvements or fixes, please contribute back to help other victims of Spanish bureaucratic incompetence.
+If you discover improvements or fixes, please contribute back to help other victims of this bureaucratic war crime masquerading as a government service.
 
 ---
 
-*"Spanish bureaucracy: Where nepotism meets Windows XP, and both are somehow still running the country."*
+*"Spanish bureaucracy: Where nepotism meets Windows XP, and both are somehow still running the country..."*
