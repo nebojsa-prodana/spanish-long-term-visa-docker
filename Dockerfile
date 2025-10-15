@@ -69,6 +69,20 @@ RUN wget -q https://firmaelectronica.gob.es/content/dam/firmaelectronica/descarg
     apt-get install -y /tmp/autofirma/*.deb || apt-get -f install -y && \
     rm -rf /tmp/autofirma.zip /tmp/autofirma
 
+# # --- AutoFirma post-installation setup (critical missing step) ---
+COPY autofirma-postinst.sh /usr/local/bin/autofirma-postinst.sh
+# RUN chmod +x /usr/local/bin/autofirma-postinst.sh && \
+#     /usr/local/bin/autofirma-postinst.sh
+
+# --- AutoFirma protocol handler setup
+COPY setup-autofirma-protocol.sh /usr/local/bin/setup-autofirma-protocol.sh
+RUN chmod +x /usr/local/bin/setup-autofirma-protocol.sh && \
+    /usr/local/bin/setup-autofirma-protocol.sh
+
+# --- Setup extrausers for proper user mapping  ---
+RUN apt-get update && apt-get install -y libnss-extrausers && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # --- User setup ---
 RUN useradd -ms /bin/bash autofirma && \
     echo "autofirma ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
@@ -79,10 +93,8 @@ WORKDIR /home/autofirma
 ENV CERT_DIR=/certs
 VOLUME ["/certs"]
 
-# --- Firefox profile setup ---
+# --- Firefox profile setup (will be enhanced by configure-firefox.sh) ---
 RUN mkdir -p /home/autofirma/.mozilla/firefox && \
-    echo '[Profile0]\nName=default\nIsRelative=1\nPath=profile.default\nDefault=1' > /home/autofirma/.mozilla/firefox/profiles.ini && \
-    mkdir -p /home/autofirma/.mozilla/firefox/profile.default && \
     chmod -R 700 /home/autofirma/.mozilla && chown -R autofirma:autofirma /home/autofirma/.mozilla
 
 # --- Start script ---
@@ -90,8 +102,10 @@ COPY start.sh /usr/local/bin/start.sh
 COPY troubleshoot.sh /usr/local/bin/troubleshoot.sh
 COPY smoketest.sh /usr/local/bin/smoketest.sh
 COPY configure-firefox.sh /usr/local/bin/configure-firefox.sh
+COPY setup-autofirma-protocol.sh /usr/local/bin/setup-autofirma-protocol.sh
+
 USER root
-RUN chmod +x /usr/local/bin/start.sh && chmod +x /usr/local/bin/troubleshoot.sh && chmod +x /usr/local/bin/smoketest.sh && chmod +x /usr/local/bin/configure-firefox.sh
+RUN chmod +x /usr/local/bin/start.sh && chmod +x /usr/local/bin/troubleshoot.sh && chmod +x /usr/local/bin/smoketest.sh && chmod +x /usr/local/bin/configure-firefox.sh && chmod +x /usr/local/bin/setup-autofirma-protocol.sh && chmod +x /usr/local/bin/autofirma-postinst.sh
 USER autofirma
 
 EXPOSE 8080

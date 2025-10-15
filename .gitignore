@@ -1,11 +1,5 @@
 # Certificate files - NEVER commit these!
-*.p12
-*.pfx
-*.crt
-*.cer
-*.pem
-
-# But allow the README in certs directory
+certs/*
 !certs/README.md
 
 # Docker artifacts
@@ -16,3 +10,5 @@
 
 # Logs
 *.log
+
+other

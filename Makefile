@@ -2,7 +2,7 @@ export DOCKER_BUILDKIT=1
 
 # Get absolute path to certs directory
 CERTS_DIR := $(shell pwd)/certs
-CONTAINER_NAME := autofirma-legacy
+CONTAINER_NAME := visa-autofirma
 IMAGE_NAME := ghcr.io/nebojsa-prodana/spanish-long-term-visa-docker:main
 
 run:

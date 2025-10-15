@@ -20,6 +20,10 @@ source /usr/local/bin/troubleshoot.sh
 # --- Configure Firefox to disable updates ---
 /usr/local/bin/configure-firefox.sh
 
+# --- Run AutoFirma post-installation setup (critical for SSL certificates) ---
+echo "Running AutoFirma post-installation setup..."
+/usr/local/bin/autofirma-postinst.sh
+
 # --- Certificate import ---
 if [ -d "$CERT_DIR" ]; then
   echo "Setting up Firefox certificate database..."
@@ -50,6 +54,10 @@ Xvfb :0 -screen 0 1280x800x24 >/dev/null 2>&1 &
 sleep 2
 dbus-launch openbox >/dev/null 2>&1 &
 sleep 1
+
+# NOTE: AutoFirma will be started on-demand by Firefox when afirma:// URLs are clicked
+# No need to start it as a service here
+
 x11vnc -display :0 -nopw -forever -shared -ncache 10 -ncache_cr -defer 1 >/dev/null 2>&1 &
 python3 -m websockify --web=/usr/share/novnc 8080 localhost:5900 >/dev/null 2>&1 &
 
