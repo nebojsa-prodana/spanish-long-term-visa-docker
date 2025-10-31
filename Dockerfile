@@ -71,8 +71,8 @@ RUN wget -q https://firmaelectronica.gob.es/content/dam/firmaelectronica/descarg
 
 # # --- AutoFirma post-installation setup (critical missing step) ---
 COPY autofirma-postinst.sh /usr/local/bin/autofirma-postinst.sh
-# RUN chmod +x /usr/local/bin/autofirma-postinst.sh && \
-#     /usr/local/bin/autofirma-postinst.sh
+RUN chmod +x /usr/local/bin/autofirma-postinst.sh && \
+    /usr/local/bin/autofirma-postinst.sh
 
 # --- AutoFirma protocol handler setup
 COPY setup-autofirma-protocol.sh /usr/local/bin/setup-autofirma-protocol.sh

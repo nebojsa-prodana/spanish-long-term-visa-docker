@@ -14,7 +14,7 @@ if [ ! -f "/usr/lib/Autofirma/autofirmaConfigurador.jar" ]; then
 fi
 
 cd /usr/lib/Autofirma
-java -jar autofirmaConfigurador.jar
+java -Djava.awt.headless=true -jar autofirmaConfigurador.jar
 echo "✓ AutoFirma certificates generated"
 
 # Step 2: Execute AutoFirma's certificate installation script if it exists
@@ -36,19 +36,19 @@ if [ ! -f "/usr/lib/Autofirma/Autofirma_ROOT.cer" ]; then
 fi
 
 # Convert DER to PEM format
-openssl x509 -inform der -in /usr/lib/Autofirma/Autofirma_ROOT.cer -out /usr/lib/Autofirma/Autofirma_ROOT.crt
+sudo openssl x509 -inform der -in /usr/lib/Autofirma/Autofirma_ROOT.cer -out /usr/lib/Autofirma/Autofirma_ROOT.crt
 
 # Install in system certificate stores
-mkdir -p /usr/share/ca-certificates/AutoFirma/
-cp /usr/lib/Autofirma/Autofirma_ROOT.crt /usr/share/ca-certificates/AutoFirma/AutoFirma_ROOT.crt
-cp /usr/lib/Autofirma/Autofirma_ROOT.crt /usr/local/share/ca-certificates/AutoFirma_ROOT.crt
+sudo mkdir -p /usr/share/ca-certificates/AutoFirma/
+sudo cp /usr/lib/Autofirma/Autofirma_ROOT.crt /usr/share/ca-certificates/AutoFirma/AutoFirma_ROOT.crt
+sudo cp /usr/lib/Autofirma/Autofirma_ROOT.crt /usr/local/share/ca-certificates/AutoFirma_ROOT.crt
 
 # Update system CA certificates
-update-ca-certificates
+sudo update-ca-certificates
 echo "✓ AutoFirma CA certificate installed in system store"
 
 # Clean up the certificate file as per original postinst
-rm -f /usr/lib/Autofirma/Autofirma_ROOT.crt
+sudo rm -f /usr/lib/Autofirma/Autofirma_ROOT.crt
 
 # Step 4: Setup Firefox preferences for AutoFirma protocol
 echo "Setting up Firefox AutoFirma preferences..."
