@@ -1,12 +1,8 @@
 #!/bin/bash
 set -e
 
-# --- Environment setup ---
-CERT_DIR=${CERT_DIR:-/certs}
-FF_CERTDB="/home/autofirma/.mozilla/firefox/profile.default"
-# NOTE: Using legacy DBM format (cert8.db) instead of modern SQL format (cert9.db)
-# Firefox ESR 52 uses the legacy format
-FF_NSS_DB="dbm:${FF_CERTDB}"
+# Load common variables
+source /usr/local/bin/common-vars.sh
 
 # --- Add troubleshooting tools to .bashrc for persistent sessions ---
 echo "source /usr/local/bin/troubleshoot.sh" >> ~/.bashrc
@@ -20,30 +16,66 @@ source /usr/local/bin/troubleshoot.sh
 # --- Configure Firefox to disable updates ---
 /usr/local/bin/configure-firefox.sh
 
-# --- Run AutoFirma post-installation setup (critical for SSL certificates) ---
+# --- Run AutoFirma post-installation setup (generates CA and SSL certs) ---
 echo "Running AutoFirma post-installation setup..."
 /usr/local/bin/autofirma-postinst.sh
 
 # --- Certificate import ---
 if [ -d "$CERT_DIR" ]; then
+  # Setup Firefox NSS database
   echo "Setting up Firefox certificate database..."
-  mkdir -p "$FF_CERTDB"
-  chown -R autofirma:autofirma "$FF_CERTDB"
+  mkdir -p "$FF_PROFILE"
+  chown -R autofirma:autofirma "$FF_PROFILE"
   
   # Initialize legacy NSS database (Firefox ESR 52 compatibility)
-  if [ ! -f "$FF_CERTDB/cert8.db" ]; then
+  if [ ! -f "$FF_PROFILE/cert8.db" ]; then
     certutil -N -d "$FF_NSS_DB" --empty-password 2>/dev/null || true
-    echo "✓ Legacy certificate database initialized"
+    echo "✓ Legacy Firefox certificate database initialized"
   fi
   
-  # Import certificates
+  # Import AutoFirma CA certificate into Firefox (required for SSL websocket connection)
+  if [ -f "$AUTOFIRMA_ROOT_CRT" ]; then
+    echo "Importing AutoFirma CA certificate into Firefox NSS database..."
+    certutil -A -n "AutoFirma ROOT" -t "CT,C,C" -d "$FF_NSS_DB" -i "$AUTOFIRMA_ROOT_CRT" 2>/dev/null || \
+    echo "⚠ AutoFirma CA certificate import failed (may already exist)"
+    echo "✓ AutoFirma CA certificate imported into Firefox"
+  fi
+  
+  # Setup user system NSS database (for user certificates)
+  echo "Setting up user NSS certificate database..."
+  mkdir -p "$USER_NSS_DIR"
+  chown -R autofirma:autofirma "$USER_NSS_DIR"
+  
+  # Initialize user NSS database (modern SQL format)
+  if [ ! -f "$USER_NSS_DIR/cert9.db" ]; then
+    certutil -N -d "$USER_NSS_DB" --empty-password 2>/dev/null || true
+    echo "✓ User NSS certificate database initialized"
+  fi
+  
+  # Import AutoFirma CA certificate into user NSS database
+  if [ -f "$AUTOFIRMA_ROOT_CRT" ]; then
+    echo "Importing AutoFirma CA certificate into user NSS database..."
+    certutil -A -n "AutoFirma ROOT" -t "CT,C,C" -d "$USER_NSS_DB" -i "$AUTOFIRMA_ROOT_CRT" 2>/dev/null || \
+    echo "⚠ AutoFirma CA certificate import failed (may already exist)"
+    echo "✓ AutoFirma CA certificate imported into user NSS"
+  fi
+  
+  # Import user certificates into user NSS database
+  echo "Importing user certificates..."
   for certfile in "$CERT_DIR"/*.p12 "$CERT_DIR"/*.pfx; do
     [ -e "$certfile" ] || continue
-    echo "Importing $certfile into legacy database..."
-    pk12util -i "$certfile" -d "$FF_NSS_DB" && echo "✓ Certificate imported" || echo "✗ Import failed"
+    echo "Processing $certfile..."
+    echo "  → User NSS database..."
+    pk12util -i "$certfile" -d "$USER_NSS_DB" && echo "    ✓ Imported to user NSS" || echo "    ✗ Failed to import to user NSS"
+    echo "  → Firefox NSS database..."
+    pk12util -i "$certfile" -d "$FF_NSS_DB" && echo "    ✓ Imported to Firefox" || echo "    ✗ Failed to import to Firefox"
   done
   
   # Show imported certificates
+  echo ""
+  echo "Certificates in user NSS database:"
+  certutil -L -d "$USER_NSS_DB" 2>/dev/null | grep -v "Certificate Nickname" | grep -v "^$" || echo "No certificates found"
+  echo ""
   echo "Certificates in Firefox database:"
   certutil -L -d "$FF_NSS_DB" 2>/dev/null | grep -v "Certificate Nickname" | grep -v "^$" || echo "No certificates found"
 fi

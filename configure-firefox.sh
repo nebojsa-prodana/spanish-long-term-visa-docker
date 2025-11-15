@@ -2,7 +2,9 @@
 # Firefox Configuration Script - Disable updates and annoying dialogs
 # Enhanced with AutoFirma integration based on https://github.com/xmartinez/autofirma-docker
 
-FF_PROFILE="/home/autofirma/.mozilla/firefox/profile.default"
+# Load common variables
+source /usr/local/bin/common-vars.sh
+
 USER_JS="$FF_PROFILE/user.js"
 
 echo "Configuring Firefox to disable updates and dialogs..."
@@ -48,16 +50,5 @@ EOF
 # Set proper ownership
 chown autofirma:autofirma "$USER_JS"
 chmod 644 "$USER_JS"
-
-# Import AutoFirma CA certificate into Firefox certificate database if available
-echo "Checking for AutoFirma CA certificate..."
-if [ -f "/usr/local/share/ca-certificates/AutoFirma_ROOT.crt" ]; then
-    echo "Importing AutoFirma CA certificate into Firefox..."
-    certutil -A -n "AutoFirma ROOT" -t "CT,C,C" -d "$FF_PROFILE" -i /usr/local/share/ca-certificates/AutoFirma_ROOT.crt 2>/dev/null || \
-    echo "⚠ AutoFirma CA certificate import failed (may already exist)"
-    echo "✓ AutoFirma CA certificate processed"
-else
-    echo "⚠ AutoFirma CA certificate not found at /usr/local/share/ca-certificates/AutoFirma_ROOT.crt"
-fi
 
 echo "✓ Firefox configured to disable updates and dialogs"

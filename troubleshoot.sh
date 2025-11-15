@@ -2,14 +2,13 @@
 # Spanish Visa Container - Troubleshooting Tools
 # This script provides debugging and troubleshooting commands
 
+# Load common variables
+source /usr/local/bin/common-vars.sh
+
 # --- Environment setup ---
 export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/default-java}
 export PATH=$JAVA_HOME/bin:/opt/firefox:$PATH
 export DISPLAY=${DISPLAY:-:0}
-export CERT_DIR=${CERT_DIR:-/certs}
-export FF_CERTDB="/home/autofirma/.mozilla/firefox/profile.default"
-# Using legacy DBM format for Firefox ESR 52 compatibility
-export FF_NSS_DB="dbm:$FF_CERTDB"
 
 # Spanish government URLs
 export VISA_SITE="https://sede.administracionespublicas.gob.es/mercurio/inicioMercurio.html"
@@ -28,6 +27,7 @@ visa-help() {
     echo ""
     echo "📋 Certificate Management:"
     echo "   cert-list         - List all certificates in Firefox"
+    echo "   cert-list-user    - List all certificates in user NSS database"
     echo "   cert-verify       - Show personal certificates only"
     echo "   cert-import-help  - Show how to import certificates"
     echo "   cert-debug        - Debug certificate database issues"
@@ -52,6 +52,7 @@ alias vnc-web='echo "VNC Web Access: http://localhost:8080/vnc.html"'
 
 # Certificate commands - using legacy database format
 alias cert-list='certutil -L -d "$FF_NSS_DB"'
+alias cert-list-user='certutil -L -d "$USER_NSS_DB"'
 alias cert-verify='certutil -L -d "$FF_NSS_DB" | grep -E "(u,u,u|Certificate Nickname)"'
 
 cert-import-help() {
@@ -67,18 +68,33 @@ cert-import-help() {
 cert-debug() {
     echo "🔍 Certificate Database Debugging:"
     echo ""
+    echo "=== Firefox NSS Database ==="
     echo "Database path: $FF_NSS_DB"
-    echo "Profile directory: $FF_CERTDB"
+    echo "Profile directory: $FF_PROFILE"
     echo ""
     echo "Database files:"
-    ls -la "$FF_CERTDB"/{cert8.db,key3.db,secmod.db} 2>/dev/null || echo "⚠ Legacy database files missing"
+    ls -la "$FF_PROFILE"/{cert8.db,key3.db,secmod.db} 2>/dev/null || echo "⚠ Legacy database files missing"
     echo ""
     echo "Certificate count:"
-    local cert_count=$(certutil -L -d "$FF_NSS_DB" 2>/dev/null | grep -v "Certificate Nickname" | grep -v "^$" | wc -l)
-    echo "Found $cert_count certificates"
+    local ff_cert_count=$(certutil -L -d "$FF_NSS_DB" 2>/dev/null | grep -v "Certificate Nickname" | grep -v "^$" | wc -l)
+    echo "Found $ff_cert_count certificates"
     echo ""
     echo "Personal certificates (u,u,u trust):"
     certutil -L -d "$FF_NSS_DB" 2>/dev/null | grep "u,u,u" || echo "No personal certificates found"
+    echo ""
+    echo "=== User NSS Database ==="
+    echo "Database path: $USER_NSS_DB"
+    echo "NSS directory: $USER_NSS_DIR"
+    echo ""
+    echo "Database files:"
+    ls -la "$USER_NSS_DIR"/{cert9.db,key4.db,pkcs11.txt} 2>/dev/null || echo "⚠ User NSS database files missing"
+    echo ""
+    echo "Certificate count:"
+    local user_cert_count=$(certutil -L -d "$USER_NSS_DB" 2>/dev/null | grep -v "Certificate Nickname" | grep -v "^$" | wc -l)
+    echo "Found $user_cert_count certificates"
+    echo ""
+    echo "Personal certificates (u,u,u trust):"
+    certutil -L -d "$USER_NSS_DB" 2>/dev/null | grep "u,u,u" || echo "No personal certificates found"
 }
 
 # System diagnostic commands
@@ -118,26 +134,37 @@ smoke-test() {
 cert-raw() {
     echo "📋 Raw Certificate Database Content:"
     echo ""
-    echo "=== Legacy Database (cert8.db) ==="
-    certutil -L -d "$FF_NSS_DB" 2>/dev/null || echo "Cannot read legacy database"
+    echo "=== Firefox Database (cert8.db - Legacy) ==="
+    certutil -L -d "$FF_NSS_DB" 2>/dev/null || echo "Cannot read Firefox database"
+    echo ""
+    echo "=== User NSS Database (cert9.db - Modern) ==="
+    certutil -L -d "$USER_NSS_DB" 2>/dev/null || echo "Cannot read user NSS database"
     echo ""
     echo "=== Database File Sizes ==="
-    ls -lh "$FF_CERTDB"/{cert8.db,key3.db,secmod.db} 2>/dev/null || echo "Database files missing"
+    echo "Firefox:"
+    ls -lh "$FF_PROFILE"/{cert8.db,key3.db,secmod.db} 2>/dev/null || echo "Firefox database files missing"
+    echo ""
+    echo "User NSS:"
+    ls -lh "$USER_NSS_DIR"/{cert9.db,key4.db,pkcs11.txt} 2>/dev/null || echo "User NSS database files missing"
 }
 
 firefox-profile() {
     echo "🦊 Firefox Profile Information:"
     echo ""
-    echo "Profile directory: $FF_CERTDB"
+    echo "Profile directory: $FF_PROFILE"
     echo "profiles.ini content:"
     cat /home/autofirma/.mozilla/firefox/profiles.ini 2>/dev/null || echo "profiles.ini not found"
     echo ""
     echo "Profile contents:"
-    ls -la "$FF_CERTDB" 2>/dev/null | head -10
+    ls -la "$FF_PROFILE" 2>/dev/null | head -10
     echo ""
     echo "Certificate database format:"
-    [ -f "$FF_CERTDB/cert8.db" ] && echo "✅ Legacy format (cert8.db)" || echo "❌ Legacy format missing"
-    [ -f "$FF_CERTDB/cert9.db" ] && echo "⚠ Modern format (cert9.db) also present" || echo "✅ No modern format conflicts"
+    [ -f "$FF_PROFILE/cert8.db" ] && echo "✅ Legacy format (cert8.db)" || echo "❌ Legacy format missing"
+    [ -f "$FF_PROFILE/cert9.db" ] && echo "⚠ Modern format (cert9.db) also present" || echo "✅ No modern format conflicts"
+    echo ""
+    echo "User NSS directory: $USER_NSS_DIR"
+    echo "User NSS contents:"
+    ls -la "$USER_NSS_DIR" 2>/dev/null | head -10 || echo "User NSS directory not found"
 }
 
 system-info() {
@@ -151,8 +178,10 @@ system-info() {
     echo "  JAVA_HOME=$JAVA_HOME"
     echo "  DISPLAY=$DISPLAY"
     echo "  CERT_DIR=$CERT_DIR"
-    echo "  FF_CERTDB=$FF_CERTDB"
+    echo "  FF_PROFILE=$FF_PROFILE"
     echo "  FF_NSS_DB=$FF_NSS_DB"
+    echo "  USER_NSS_DIR=$USER_NSS_DIR"
+    echo "  USER_NSS_DB=$USER_NSS_DB"
     echo ""
     echo "Container uptime: $(uptime)"
 }
@@ -160,7 +189,10 @@ system-info() {
 # Quick certificate import function
 cert-import-manual() {
     if [ -z "$1" ]; then
-        echo "Usage: cert-import-manual /path/to/certificate.p12"
+        echo "Usage: cert-import-manual /path/to/certificate.p12 [firefox|user|both]"
+        echo "  firefox - Import only to Firefox NSS database"
+        echo "  user    - Import only to user NSS database (default)"
+        echo "  both    - Import to both databases"
         return 1
     fi
     
@@ -169,8 +201,26 @@ cert-import-manual() {
         return 1
     fi
     
+    local target="${2:-user}"
+    
     echo "📋 Manually importing certificate: $1"
-    pk12util -i "$1" -d "$FF_NSS_DB" && echo "✅ Import successful" || echo "❌ Import failed"
+    
+    case "$target" in
+        firefox)
+            pk12util -i "$1" -d "$FF_NSS_DB" && echo "✅ Import to Firefox successful" || echo "❌ Firefox import failed"
+            ;;
+        user)
+            pk12util -i "$1" -d "$USER_NSS_DB" && echo "✅ Import to user NSS successful" || echo "❌ User NSS import failed"
+            ;;
+        both)
+            pk12util -i "$1" -d "$USER_NSS_DB" && echo "✅ Import to user NSS successful" || echo "❌ User NSS import failed"
+            pk12util -i "$1" -d "$FF_NSS_DB" && echo "✅ Import to Firefox successful" || echo "❌ Firefox import failed"
+            ;;
+        *)
+            echo "❌ Invalid target: $target. Use 'firefox', 'user', or 'both'"
+            return 1
+            ;;
+    esac
 }
 
 # Export functions and aliases so they're available in interactive shells

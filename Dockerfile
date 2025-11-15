@@ -34,8 +34,8 @@ RUN apt-get install -y libdbus-glib-1-2 libxt6 libasound2
 # --- Certificate tools ---
 RUN apt-get install -y libnss3-tools p11-kit
 
-# --- Certificate tools ---
-RUN apt-get install -y libnss3-tools p11-kit
+# --- Desktop integration tools ---
+RUN apt-get install -y xdg-utils
 
 # --- Cleanup ---
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -69,7 +69,11 @@ RUN wget -q https://firmaelectronica.gob.es/content/dam/firmaelectronica/descarg
     apt-get install -y /tmp/autofirma/*.deb || apt-get -f install -y && \
     rm -rf /tmp/autofirma.zip /tmp/autofirma
 
-# # --- AutoFirma post-installation setup (critical missing step) ---
+# --- Copy common variables file (required by other scripts) ---
+COPY common-vars.sh /usr/local/bin/common-vars.sh
+RUN chmod +x /usr/local/bin/common-vars.sh
+
+# --- AutoFirma post-installation setup (critical missing step) ---
 COPY autofirma-postinst.sh /usr/local/bin/autofirma-postinst.sh
 RUN chmod +x /usr/local/bin/autofirma-postinst.sh && \
     /usr/local/bin/autofirma-postinst.sh

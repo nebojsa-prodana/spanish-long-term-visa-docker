@@ -1,5 +1,10 @@
 #!/bin/bash
+#!/bin/bash
 # Spanish Visa Container - Smoke Tests
+# Validate that all critical components are in place and ready
+
+# Load common variables
+source /usr/local/bin/common-vars.sh
 # This script performs basic system validation
 
 echo "🔍 Running smoke tests..."
@@ -81,7 +86,6 @@ fi
 
 # Test certificate directory
 echo -n "Testing certificate directory... "
-CERT_DIR=${CERT_DIR:-/certs}
 if [ -d "$CERT_DIR" ]; then
     CERT_COUNT=$(find "$CERT_DIR" -name "*.p12" -o -name "*.pfx" 2>/dev/null | wc -l)
     echo "✓ Certificate directory mounted"
