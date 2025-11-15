@@ -10,6 +10,7 @@ import time
 import logging
 import argparse
 import smtplib
+import random
 from datetime import datetime
 from pathlib import Path
 from email.mime.text import MIMEText
@@ -43,6 +44,19 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Realistic User-Agent strings to rotate through (avoid detection)
+# IMPORTANT: Only Firefox User-Agents since we're actually running Firefox 52 ESR
+# Mixing Chrome/Safari UAs with Firefox's navigator object would create detectable inconsistencies
+USER_AGENTS = [
+    # Firefox 52 ESR on various platforms (matching our actual Firefox version)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0",
+    "Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:52.0) Gecko/20100101 Firefox/52.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.13; rv:52.0) Gecko/20100101 Firefox/52.0",
+]
 
 
 class CitaChecker:
@@ -91,10 +105,17 @@ class CitaChecker:
         from selenium.webdriver.firefox.options import Options as FirefoxOptions
         from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
         
+        # Randomly select a User-Agent to avoid fingerprinting/detection
+        user_agent = random.choice(USER_AGENTS)
+        logger.info(f"Selected User-Agent: {user_agent}")
+        
         options = FirefoxOptions()
         # Start Firefox in private browsing to avoid sticky cookies hitting load-balancers
         options.set_preference("browser.privatebrowsing.autostart", True)
         logger.info("Configured Firefox to start in private browsing mode")
+        
+        # Set randomized User-Agent
+        options.set_preference("general.useragent.override", user_agent)
         
         # Try using FirefoxProfile object instead of command-line argument
         # This might work better with old Firefox + Selenium
@@ -128,6 +149,51 @@ class CitaChecker:
             profile.set_preference("network.cookie.thirdparty.sessionOnly", True)
             profile.set_preference("network.cookie.cookieBehavior", 1)  # 1 = block third-party cookies
             logger.info("Configured cookie/privacy preferences for private session")
+            
+            # Apply the same User-Agent to the profile (for consistency)
+            profile.set_preference("general.useragent.override", user_agent)
+            
+            # HTTP Headers - make them common to blend in (based on AmIUnique findings)
+            # Accept header: Use more common modern Firefox accept header
+            profile.set_preference("network.http.accept.default", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+            
+            # Accept-Language: Use Spanish as primary to match the target website
+            # Randomize slightly but keep realistic for Spain
+            lang_variants = [
+                "es-ES,es;q=0.9",  # Most common for Spanish users
+                "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3",  # Spanish user with some English
+                "es,es-ES;q=0.9,en;q=0.7",  # Alternative Spanish priority
+            ]
+            selected_lang = random.choice(lang_variants)
+            profile.set_preference("intl.accept_languages", selected_lang)
+            
+            # Accept-Encoding: Common encoding support (gzip, deflate, br)
+            # Firefox 52 supports these
+            profile.set_preference("network.http.accept-encoding", "gzip, deflate, br")
+            
+            # DNT (Do Not Track): Most users don't set this, so disable it to be more common
+            profile.set_preference("privacy.donottrackheader.enabled", False)
+            
+            # Upgrade-Insecure-Requests: Set to 1 (standard for modern browsers)
+            # This is automatically sent by Firefox 52+
+            
+            # Disable WebRTC to prevent IP leaks
+            profile.set_preference("media.peerconnection.enabled", False)
+            
+            # Disable geolocation
+            profile.set_preference("geo.enabled", False)
+            
+            # Disable WebGL (can be used for fingerprinting)
+            profile.set_preference("webgl.disabled", True)
+            
+            # Disable battery API (fingerprinting vector)
+            profile.set_preference("dom.battery.enabled", False)
+            
+            # Disable canvas fingerprinting
+            # Note: This might break some sites, but reduces fingerprinting surface
+            profile.set_preference("privacy.resistFingerprinting", True)
+            
+            logger.info(f"Applied anti-fingerprinting: lang={selected_lang}, headers=normalized, resistFingerprinting=true")
         else:
             profile = None
             logger.warning(f"Profile not found: {profile_path}")
@@ -204,7 +270,7 @@ class CitaChecker:
             except Exception as e:
                 logger.error(f"Failed to save screenshot: {e}")
     
-    def wait_and_click(self, by, selector, timeout=10):
+    def wait_and_click(self, by, selector, timeout=10, script_click=True):
         """Wait for element and click it."""
         try:
             element = WebDriverWait(self.driver, timeout).until(
@@ -229,7 +295,10 @@ class CitaChecker:
                     f"text={element.text.strip()[:80]!r}, "
                     f"selector={selector}"
                 )
-            element.click()
+            if script_click:
+                self.driver.execute_script("arguments[0].click();", element)
+            else:
+                element.click()
             logger.info(f"Clicked element: : tag={element.tag_name}, "
                 f"id={element.get_attribute('id')}, "
                 f"class={element.get_attribute('class')}, "
@@ -417,18 +486,27 @@ class CitaChecker:
             # Additional human-like delay before clicking
             logger.info("Pausing before clicking Aceptar (mimicking human behavior)...")
             time.sleep(3)
+
+            current_url = self.driver.current_url
+            logger.info(f"Current URL before clicking: {current_url}")
             
             # Click "Aceptar" using XPath and wait for redirect (up to 2 minutes)
-            if not self.wait_and_click(By.ID, "btnAceptar", timeout=30):
+            if not self.wait_and_click(By.ID, "btnAceptar", timeout=30, script_click=True):
                 logger.warning("Could not click Aceptar after tramite selection")
             else:
-                # Give extra time for the JavaScript onclick handler to execute and submit the form
-                logger.info("Waiting for form submission to process...")
-                time.sleep(5)  # Longer pause to ensure JS completes before checking for redirect
+                # # Give extra time for the JavaScript onclick handler to execute and submit the form
+                # logger.info("Waiting for form submission to process...")
+                # time.sleep(5)  # Longer pause to ensure JS completes before checking for redirect
+
+                # if not self.wait_and_click(By.ID, "btnAceptar", timeout=30, script_click=True):
+                #     logger.error("Could not click Aceptar after tramite selection")
+                #     return False
                 
-                logger.info("Waiting for redirect to authentication/availability page (can take minutes)...")
-                current_url = self.driver.current_url
-                logger.info(f"Current URL before waiting: {current_url}")
+                # time.sleep(5)  # Longer pause to ensure JS completes before checking for redirect
+
+                # logger.info("Waiting for redirect to authentication/availability page (can take minutes)...")
+                # current_url = self.driver.current_url
+                # logger.info(f"Current URL before waiting: {current_url}")
                 
                 # The page might redirect, or it might just update with a warning/error
                 # Wait for EITHER:
