@@ -741,6 +741,8 @@ class CitaChecker:
         logger.info(f"Use Cl@ve: {self.use_clave}")
         logger.info("="*60)
         
+        result = "ERROR"  # Initialize result for finally block
+        
         try:
             # Setup browser
             if not self.setup_firefox():
@@ -757,6 +759,25 @@ class CitaChecker:
             result = self.check_availability()
             
             logger.info(f"Check result: {result}")
+            
+            # If cita is AVAILABLE, keep browser open for user to manually select
+            if result == "AVAILABLE":
+                logger.info("="*60)
+                logger.info("🎉 CITA AVAILABLE! 🎉")
+                logger.info("Browser will remain OPEN for you to select your appointment.")
+                logger.info("Please complete the booking process manually.")
+                logger.info("Press Ctrl+C when finished to close the browser.")
+                logger.info("="*60)
+                
+                try:
+                    # Keep the browser alive - wait indefinitely until user interrupts
+                    while True:
+                        time.sleep(60)  # Check every minute if process is still alive
+                except KeyboardInterrupt:
+                    logger.info("User interrupted - closing browser...")
+                except Exception as e:
+                    logger.error(f"Error while keeping browser open: {e}")
+            
             return result
             
         except Exception as e:
@@ -766,8 +787,9 @@ class CitaChecker:
             return "ERROR"
             
         finally:
-            # Cleanup
-            if self.driver:
+            # Cleanup - only close browser if NOT available or on error
+            # The AVAILABLE case handles browser lifecycle above
+            if self.driver and result != "AVAILABLE":
                 try:
                     logger.info("Closing browser...")
                     self.driver.quit()
