@@ -190,6 +190,72 @@ Certificates can also be imported through Firefox:
 3. Click `Import` and select your certificate file
 4. Check the appropriate trust settings
 
+## After Approval: Booking Your Appointment (Cita)
+
+🎉 **Congratulations!** Once your long-term residence application is approved, you need to book an appointment (cita) at a police office for fingerprinting (toma de huellas).
+
+### Automated Cita Checker with Multi-Channel Notifications
+
+The Spanish police appointment system rarely has available appointments. This repository includes an automated script that runs inside the Docker container to check for availability every 30 minutes and **aggressively notifies you** via multiple channels.
+
+**Quick Start:**
+```bash
+# 1. Start Docker container (mounts cita-checker folder)
+make run
+
+# 2. Open shell in container
+make shell
+
+# 3. Start monitoring with notifications (EMAIL REQUIRED)
+/workspace/cita-checker/monitor-cita.sh start \
+  -p "Barcelona" \
+  -o "Barcelona" \
+  -t "POLICIA-TOMA DE HUELLAS" \
+  --email-to your-email@gmail.com \
+  --smtp-server smtp.gmail.com \
+  --smtp-user your-email@gmail.com \
+  --smtp-pass your-app-password
+
+# 4. Add SMS/Call notifications (highly recommended!)
+/workspace/cita-checker/monitor-cita.sh start \
+  -p "Barcelona" \
+  -o "Barcelona" \
+  -t "POLICIA-TOMA DE HUELLAS" \
+  --email-to your-email@gmail.com \
+  --smtp-server smtp.gmail.com \
+  --smtp-user your-email@gmail.com \
+  --smtp-pass your-app-password \
+  --twilio-sid ACxxxxx \
+  --twilio-token your_token \
+  --twilio-from +1234567890 \
+  --twilio-to +0987654321 \
+  --call
+```
+
+**Notification Channels:**
+- ✅ **Email** (REQUIRED) - HTML message with VNC link
+- ✅ **SMS** (optional) - Text message via Twilio  
+- ✅ **Phone Call** (optional) - Automated voice call via Twilio
+- ✅ **System Beeps** - Audio alerts
+- ✅ **Urgent File** - Creates `/tmp/CITA_AVAILABLE_NOW.txt`
+
+**How it works:**
+1. Script runs inside Docker every 30 minutes (configurable)
+2. Uses Selenium to automate Firefox with your digital certificate
+3. When appointment found:
+   - **Sends notifications via ALL configured channels**
+   - **Stops checking automatically**
+   - **Leaves browser open on the booking page**
+4. **You check VNC** (http://localhost:8080/vnc.html) to complete booking immediately
+
+**Why so aggressive?** Appointments fill within 5-10 minutes of appearing. Multiple notification channels ensure you don't miss it!
+
+**Twilio (SMS/Call):** FREE trial with $15 credit - enough for hundreds of notifications. Sign up at https://www.twilio.com/try-twilio
+
+**Live Editing:** The `cita-checker/` folder is mounted from your host machine. Edit scripts without rebuilding the container!
+
+**Full Documentation:** See [cita-checker/CITA_README.md](cita-checker/CITA_README.md) for detailed setup, Twilio configuration, and troubleshooting.
+
 ## Troubleshooting
 
 If something doesn't work as expected:

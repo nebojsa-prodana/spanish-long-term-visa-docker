@@ -2,6 +2,7 @@ export DOCKER_BUILDKIT=1
 
 # Get absolute path to certs directory
 CERTS_DIR := $(shell pwd)/certs
+CITA_DIR := $(shell pwd)/cita-checker
 CONTAINER_NAME := visa-autofirma
 IMAGE_NAME := ghcr.io/nebojsa-prodana/spanish-long-term-visa-docker:main
 
@@ -13,6 +14,7 @@ run:
 		--name $(CONTAINER_NAME) \
 		-p 8080:8080 \
 		-v $(CERTS_DIR):/certs \
+		-v $(CITA_DIR):/workspace/cita-checker \
 		$(IMAGE_NAME)
 
 build-and-run:
@@ -36,6 +38,7 @@ build-and-run:
 		--name $(CONTAINER_NAME) \
 		-p 8080:8080 \
 		-v $(CERTS_DIR):/certs \
+		-v $(CITA_DIR):/workspace/cita-checker \
 		autofirma-legacy
 
 shell:

@@ -101,6 +101,22 @@ VOLUME ["/certs"]
 RUN mkdir -p /home/autofirma/.mozilla/firefox && \
     chmod -R 700 /home/autofirma/.mozilla && chown -R autofirma:autofirma /home/autofirma/.mozilla
 
+# --- Install Python dependencies for cita checker ---
+RUN apt-get update && apt-get install -y python3-pip && \
+    pip3 install selenium twilio && \
+    wget -q https://github.com/mozilla/geckodriver/releases/download/v0.33.0/geckodriver-v0.33.0-linux64.tar.gz && \
+    tar -xzf geckodriver-v0.33.0-linux64.tar.gz && \
+    mv geckodriver /usr/local/bin/ && \
+    chmod +x /usr/local/bin/geckodriver && \
+    rm geckodriver-v0.33.0-linux64.tar.gz && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# --- Create workspace directory for scripts (will be mounted) ---
+RUN mkdir -p /workspace/cita-checker && chown -R autofirma:autofirma /workspace
+
+# --- Volume for cita-checker scripts (can be edited without rebuild) ---
+VOLUME ["/workspace/cita-checker"]
+
 # --- Start script ---
 COPY start.sh /usr/local/bin/start.sh
 COPY troubleshoot.sh /usr/local/bin/troubleshoot.sh
@@ -109,8 +125,14 @@ COPY configure-firefox.sh /usr/local/bin/configure-firefox.sh
 COPY setup-autofirma-protocol.sh /usr/local/bin/setup-autofirma-protocol.sh
 
 USER root
-RUN chmod +x /usr/local/bin/start.sh && chmod +x /usr/local/bin/troubleshoot.sh && chmod +x /usr/local/bin/smoketest.sh && chmod +x /usr/local/bin/configure-firefox.sh && chmod +x /usr/local/bin/setup-autofirma-protocol.sh && chmod +x /usr/local/bin/autofirma-postinst.sh
+RUN chmod +x /usr/local/bin/start.sh && \
+    chmod +x /usr/local/bin/troubleshoot.sh && \
+    chmod +x /usr/local/bin/smoketest.sh && \
+    chmod +x /usr/local/bin/configure-firefox.sh && \
+    chmod +x /usr/local/bin/setup-autofirma-protocol.sh && \
+    chmod +x /usr/local/bin/autofirma-postinst.sh
 USER autofirma
 
 EXPOSE 8080
 CMD ["/usr/local/bin/start.sh"]
+

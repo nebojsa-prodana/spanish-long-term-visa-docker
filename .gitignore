@@ -2,6 +2,14 @@
 certs/*
 !certs/README.md
 
+# Cita checker configuration with sensitive data
+cita-checker/.env
+.env
+
+# Cita checker logs and screenshots
+/tmp/cita-*.log
+/tmp/cita-screenshots/
+
 # Docker artifacts
 .docker/
 
