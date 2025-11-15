@@ -29,8 +29,8 @@ except ImportError:
     sys.exit(1)
 
 # Configuration
-CITA_URL = "https://icp.administracionelectronica.gob.es/icpplustieb"
-SCREENSHOT_DIR = Path("/tmp/cita-screenshots")
+CITA_URL = "https://icp.administracionelectronica.gob.es/icpplus/index.html"
+SCREENSHOT_DIR = Path(f"/certs/cita-screenshots/{datetime.now().strftime('%Y%m%d-%H%M%S')}")
 LOG_FILE = Path("/tmp/cita-checker-selenium.log")
 
 # Setup logging
@@ -71,34 +71,126 @@ class CitaChecker:
         """Setup Firefox with the existing profile that has certificates."""
         logger.info("Setting up Firefox with existing profile...")
         
-        options = Options()
-        # Use the existing Firefox profile that has certificates
-        profile_path = "/home/autofirma/.mozilla/firefox/profile.default"
-        if os.path.exists(profile_path):
-            options.add_argument(f"-profile")
-            options.add_argument(profile_path)
-            logger.info(f"Using Firefox profile: {profile_path}")
-        else:
-            logger.warning(f"Profile not found: {profile_path}")
+        # Set DISPLAY environment variable for X server
+        os.environ['DISPLAY'] = ':0'
+        logger.info("Set DISPLAY=:0 for X server")
         
-        # Set display
-        options.add_argument("--display=:0")
+        # Remove profile lock if it exists (from previous Firefox sessions)
+        profile_path = "/home/autofirma/.mozilla/firefox/profile.default"
+        lock_file = os.path.join(profile_path, ".parentlock")
+        lock_symlink = os.path.join(profile_path, "lock")
+        
+        if os.path.exists(lock_file):
+            os.remove(lock_file)
+            logger.info("Removed .parentlock file")
+        if os.path.exists(lock_symlink):  # lexists checks symlinks even if target doesn't exist
+            os.remove(lock_symlink)
+            logger.info("Removed lock symlink")
+        
+        # Use the existing Firefox profile that has certificates
+        from selenium.webdriver.firefox.options import Options as FirefoxOptions
+        from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
+        
+        options = FirefoxOptions()
+        # Start Firefox in private browsing to avoid sticky cookies hitting load-balancers
+        options.set_preference("browser.privatebrowsing.autostart", True)
+        logger.info("Configured Firefox to start in private browsing mode")
+        
+        # Try using FirefoxProfile object instead of command-line argument
+        # This might work better with old Firefox + Selenium
+        if os.path.exists(profile_path):
+            profile = FirefoxProfile(profile_path)
+            logger.info(f"Using Firefox profile: {profile_path}")
+            
+            # Disable problematic features that cause crashes in old Firefox
+            profile.set_preference("browser.tabs.remote.autostart", False)
+            profile.set_preference("browser.tabs.remote.autostart.2", False)
+            profile.set_preference("extensions.e10sBlocksEnabling", True)
+            profile.set_preference("browser.tabs.remote.force-enable", False)
+            profile.set_preference("marionette.port", 2828)
+            profile.set_preference("marionette.enabled", True)
+            logger.info("Disabled multi-process mode (e10s) to prevent crashes")
+            
+            # Accept insecure certificates (Spanish government site has SSL issues)
+            profile.set_preference("webdriver_accept_untrusted_certs", True)
+            profile.set_preference("webdriver_assume_untrusted_issuer", True)
+            profile.accept_untrusted_certs = True
+            logger.info("Configured to accept insecure SSL certificates")
+            
+            # Configure automatic certificate selection
+            # This tells Firefox to automatically select a certificate when prompted
+            profile.set_preference("security.default_personal_cert", "Select Automatically")
+            logger.info("Configured to auto-select certificate")
+
+            # Privacy preferences to reduce tracking/cookies that may trip load-balancers
+            # Clear cookies on shutdown and block third-party cookies
+            profile.set_preference("network.cookie.lifetimePolicy", 2)  # 2 = session-only
+            profile.set_preference("network.cookie.thirdparty.sessionOnly", True)
+            profile.set_preference("network.cookie.cookieBehavior", 1)  # 1 = block third-party cookies
+            logger.info("Configured cookie/privacy preferences for private session")
+        else:
+            profile = None
+            logger.warning(f"Profile not found: {profile_path}")
         
         # Create Firefox driver
         try:
             # Use the existing Firefox installation
             firefox_binary = "/opt/firefox/firefox"
-            if os.path.exists(firefox_binary):
-                options.binary_location = firefox_binary
-                logger.info(f"Using Firefox binary: {firefox_binary}")
+            options.binary_location = firefox_binary
+            logger.info(f"Using Firefox binary: {firefox_binary}")
             
-            self.driver = webdriver.Firefox(options=options)
-            self.driver.set_page_load_timeout(30)
-            logger.info("✓ Firefox driver initialized")
+            # Selenium 3.14.1 + GeckoDriver 0.19.1 + Firefox 52 ESR
+            # Use firefox_profile parameter instead of options for better compatibility
+            self.driver = webdriver.Firefox(
+                firefox_profile=profile,
+                firefox_binary=firefox_binary,
+                options=options,
+                executable_path="/usr/local/bin/geckodriver",
+                service_log_path="/tmp/geckodriver.log",
+                timeout=60  # Increase timeout for slow startup
+            )
+            
+            # Set timeouts for page loads and implicit waits
+            self.driver.set_page_load_timeout(120)  # 2 minutes for slow pages
+            self.driver.implicitly_wait(10)  # Wait up to 10 seconds for elements
+            
+            # Maximize window to ensure all elements are visible
+            try:
+                self.driver.maximize_window()
+                logger.info("✓ Window maximized")
+            except Exception as e:
+                logger.warning(f"Could not maximize window: {e}")
+
+            # Immediately clear cookies to ensure a pristine session inside the private window
+            try:
+                self.driver.delete_all_cookies()
+                logger.info("Cleared all cookies after browser start to avoid sticky session issues")
+            except Exception as e:
+                logger.warning(f"Could not clear cookies: {e}")
+            # Also clear local/session storage to remove any sticky state
+            try:
+                self.driver.execute_script("window.localStorage.clear(); window.sessionStorage.clear();")
+                logger.info("Cleared localStorage and sessionStorage")
+            except Exception as e:
+                logger.warning(f"Could not clear local/session storage: {e}")
+            
+            logger.info("✓ Firefox driver initialized with timeouts")
+            
             return True
-        except Exception as e:
-            logger.error(f"Failed to initialize Firefox driver: {e}")
-            logger.error("Make sure geckodriver is installed and in PATH")
+        except Exception:
+            logger.exception("Failed to initialize Firefox driver")
+            logger.error("Check Firefox and GeckoDriver compatibility")
+            
+            # Try to read geckodriver log for more details
+            try:
+                with open("/tmp/geckodriver.log", "r") as f:
+                    log_content = f.read()
+                    if log_content:
+                        logger.error("GeckoDriver log output:")
+                        logger.error(log_content[-2000:])  # Last 2000 chars
+            except Exception:
+                pass
+            
             return False
     
     def take_screenshot(self, name):
@@ -112,35 +204,75 @@ class CitaChecker:
             except Exception as e:
                 logger.error(f"Failed to save screenshot: {e}")
     
-    def wait_and_click(self, by, value, timeout=10):
+    def wait_and_click(self, by, selector, timeout=10):
         """Wait for element and click it."""
         try:
             element = WebDriverWait(self.driver, timeout).until(
-                EC.element_to_be_clickable((by, value))
+                EC.element_to_be_clickable((by, selector))
             )
+            
+            # Scroll element into view before clicking
+            try:
+                self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+                time.sleep(0.5)  # Brief pause after scroll
+                logger.info(
+                    f"Scrolled element into view: tag={element.tag_name}, "
+                    f"id={element.get_attribute('id')}, "
+                    f"class={element.get_attribute('class')}, "
+                    f"text={element.text.strip()[:80]!r}, "
+                    f"selector={selector}"
+                )
+            except Exception:
+                logger.exception("Could not scroll element into view: : tag={element.tag_name}, "
+                    f"id={element.get_attribute('id')}, "
+                    f"class={element.get_attribute('class')}, "
+                    f"text={element.text.strip()[:80]!r}, "
+                    f"selector={selector}"
+                )
             element.click()
-            logger.info(f"Clicked element: {value}")
+            logger.info(f"Clicked element: : tag={element.tag_name}, "
+                f"id={element.get_attribute('id')}, "
+                f"class={element.get_attribute('class')}, "
+                f"text={element.text.strip()[:80]!r}, "
+                f"selector={selector}"
+            )
             return True
         except TimeoutException:
-            logger.warning(f"Timeout waiting for element: {value}")
+            logger.warning(f"Timeout waiting for element via selector: {selector}")
+            return False
+        except Exception:
+            logger.exception(f"Error clicking element via selector {selector}")
+            return False
+
+    def wait_for_ready_state(self, timeout=120):
+        """Wait until document.readyState == 'complete'. Returns True if ready, False on timeout."""
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+            logger.info("✓ document.readyState == 'complete'")
+            return True
+        except TimeoutException:
+            logger.warning(f"Timeout waiting for document.readyState to be 'complete' (timeout={timeout}s)")
             return False
         except Exception as e:
-            logger.error(f"Error clicking element {value}: {e}")
+            logger.warning(f"Error while waiting for readyState: {e}")
             return False
     
-    def select_dropdown_option(self, select_id, option_text):
-        """Select an option from a dropdown by visible text."""
-        try:
-            select_element = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, select_id))
-            )
-            select = Select(select_element)
-            select.select_by_visible_text(option_text)
-            logger.info(f"Selected '{option_text}' in dropdown '{select_id}'")
-            return True
-        except Exception as e:
-            logger.error(f"Error selecting option in dropdown {select_id}: {e}")
-            return False
+    # def select_dropdown_option(self, select_id, option_text):
+    #     """Select an option from a dropdown by visible text."""
+    #     try:
+    #         select_element = WebDriverWait(self.driver, 10).until(
+    #             EC.presence_of_element_located((By.ID, select_id))
+    #         )
+    #         select = Select(select_element)
+    #         select.select_by_visible_text(option_text)
+    #         logger.info(f"Selected '{option_text}' in dropdown '{select_id}'")
+    #         return True
+    #     except Exception as e:
+    #         logger.error(f"Error selecting option in dropdown {select_id}: {e}")
+    #         return False
+
     
     def authenticate_with_clave(self):
         """Authenticate using Cl@ve (digital certificate)."""
@@ -177,6 +309,160 @@ class CitaChecker:
             self.take_screenshot("authentication-error")
             return False
     
+    def select_provincia(self):
+        """Select provincia from dropdown."""
+        logger.info(f"Selecting provincia: {self.provincia}")
+        
+        try:
+            # Use explicit XPath selectors per user guidance
+            provincia_dropdown = WebDriverWait(self.driver, 30).until(
+                EC.presence_of_element_located((By.XPATH, '//*[@id="form"]'))
+            )
+            
+            # Scroll into view
+            try:
+                self.driver.execute_script("arguments[0].scrollIntoView(true);", provincia_dropdown)
+                time.sleep(0.5)
+                logger.info("Scrolled provincia dropdown into view")
+            except Exception as e:
+                logger.warning(f"Could not scroll provincia dropdown: {e}")
+            
+            select = Select(provincia_dropdown)
+            select.select_by_visible_text(self.provincia)
+            logger.info(f"✓ Selected provincia: {self.provincia}")
+            time.sleep(2)  # Increased delay to mimic human behavior
+            self.take_screenshot("provincia-selected")
+
+            # Wait a bit before clicking (human-like delay)
+            logger.info("Pausing before clicking Aceptar (mimicking human behavior)...")
+            time.sleep(2)
+            
+            # Click Aceptar via XPath
+            if not self.wait_and_click(By.ID, "btnAceptar", timeout=30):
+                logger.warning("Could not click Aceptar after provincia")
+
+            # Wait for redirect to finish (up to 2 minutes)
+            self.wait_for_ready_state(timeout=120)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error selecting provincia: {e}")
+            self.take_screenshot("provincia-error")
+            return False
+    
+    def select_oficina(self):
+        """Select the oficina (office) from dropdown."""
+        try:
+            logger.info(f"Selecting oficina: {self.oficina}")
+            
+            # Wait for oficina dropdown to be present - use XPath as provided
+            oficina_dropdown = WebDriverWait(self.driver, 30).until(
+                EC.presence_of_element_located((By.XPATH, '//*[@id="sede"]'))
+            )
+            
+            # Scroll into view
+            try:
+                self.driver.execute_script("arguments[0].scrollIntoView(true);", oficina_dropdown)
+                time.sleep(0.5)
+                logger.info("Scrolled oficina dropdown into view")
+            except Exception as e:
+                logger.warning(f"Could not scroll oficina dropdown: {e}")
+            
+            select = Select(oficina_dropdown)
+
+            logger.info(f"Selecting oficina by value: {self.oficina}")
+            select.select_by_value(self.oficina)
+            logger.info(f"✓ Selected oficina by value: {self.oficina}")
+            
+            time.sleep(2)  # Increased delay to mimic human behavior
+            self.take_screenshot("oficina-selected")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error selecting oficina: {e}")
+            self.take_screenshot("oficina-error")
+            return False
+    
+    def select_tramite(self):
+        """Select the tramite (procedure type) from dropdown."""
+        try:
+            logger.info(f"Selecting tramite: {self.tramite}")
+            
+            # Wait for tramite dropdown to be present - use XPath as provided
+            tramite_dropdown = WebDriverWait(self.driver, 30).until(
+                EC.presence_of_element_located((By.XPATH, '//*[@id="tramiteGrupo[0]"]'))
+            )
+            
+            # Scroll into view
+            try:
+                self.driver.execute_script("arguments[0].scrollIntoView(true);", tramite_dropdown)
+                time.sleep(0.5)
+                logger.info("Scrolled tramite dropdown into view")
+            except Exception as e:
+                logger.warning(f"Could not scroll tramite dropdown: {e}")
+            
+            select = Select(tramite_dropdown)
+            select.select_by_value(self.tramite)
+            logger.info(f"✓ Selected tramite: {self.tramite}")
+            
+            time.sleep(2)  # Increased delay to mimic human behavior
+            self.take_screenshot("tramite-selected")
+            
+            # Wait for JavaScript to fully load and register onclick handlers
+            # The button exists in DOM but its onclick handler might not be registered yet
+            # Also helps avoid bot detection by not acting too quickly
+            logger.info("Waiting for page JavaScript to initialize and mimicking human behavior...")
+            time.sleep(5)  # Longer delay to avoid bot detection
+            
+            # Additional human-like delay before clicking
+            logger.info("Pausing before clicking Aceptar (mimicking human behavior)...")
+            time.sleep(3)
+            
+            # Click "Aceptar" using XPath and wait for redirect (up to 2 minutes)
+            if not self.wait_and_click(By.ID, "btnAceptar", timeout=30):
+                logger.warning("Could not click Aceptar after tramite selection")
+            else:
+                # Give extra time for the JavaScript onclick handler to execute and submit the form
+                logger.info("Waiting for form submission to process...")
+                time.sleep(5)  # Longer pause to ensure JS completes before checking for redirect
+                
+                logger.info("Waiting for redirect to authentication/availability page (can take minutes)...")
+                current_url = self.driver.current_url
+                logger.info(f"Current URL before waiting: {current_url}")
+                
+                # The page might redirect, or it might just update with a warning/error
+                # Wait for EITHER:
+                # 1. URL to change (redirect happened)
+                # 2. Warning div to appear (no citas message shown on same page)
+                # 3. Cl@ve button to appear (authentication page loaded)
+                
+                page_changed = False
+                time.sleep(3)  # Additional buffer for any quick updates
+                
+                try:
+                    # Wait for either URL change OR warning div OR clave button
+                    WebDriverWait(self.driver, 120).until(
+                        lambda d: d.current_url != current_url or 
+                                  len(d.find_elements(By.XPATH, '//*[@id="warning"]')) > 0 or
+                                  len(d.find_elements(By.XPATH, '//*[@id="btnAccesoClave"]')) > 0
+                    )
+                    page_changed = True
+                    logger.info(f"✓ Page changed/updated - URL: {self.driver.current_url}")
+                except TimeoutException:
+                    logger.warning("Timeout waiting for page change, continuing anyway...")
+                
+                # Wait for page to be fully loaded
+                self.wait_for_ready_state(timeout=60)
+                time.sleep(3)  # Extra buffer
+                self.take_screenshot("after-tramite-aceptar")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error selecting tramite: {e}")
+            self.take_screenshot("tramite-error")
+            return False
+    
     def navigate_to_appointment_form(self):
         """Navigate through the website to the appointment form."""
         logger.info(f"Navigating to {CITA_URL}...")
@@ -184,29 +470,48 @@ class CitaChecker:
         try:
             # Load the main page
             self.driver.get(CITA_URL)
-            time.sleep(3)
+            
+            # Wait for page load to complete using document.readyState
+            logger.info("Waiting for homepage to fully load...")
+            try:
+                WebDriverWait(self.driver, 120).until(
+                    lambda d: d.execute_script("return document.readyState") == "complete"
+                )
+                logger.info("✓ Homepage loaded (document.readyState = complete)")
+                
+                # Also wait for the provincia form to be present
+                WebDriverWait(self.driver, 30).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "select"))
+                )
+                logger.info("✓ Provincia form found")
+            except TimeoutException:
+                logger.warning("Timeout waiting for homepage to load")
+            
+            time.sleep(2)  # Extra buffer for JavaScript
             self.take_screenshot("homepage")
             
             # Log current URL and title
             logger.info(f"Current URL: {self.driver.current_url}")
             logger.info(f"Page title: {self.driver.title}")
             
-            # Authenticate if required
-            if self.use_clave:
-                self.authenticate_with_clave()
-                time.sleep(3)
+            # Step 1: Select provincia
+            if not self.select_provincia():
+                logger.error("Failed to select provincia")
+                return False
             
-            # This is where you would navigate through the form
-            # The exact steps depend on the website structure
-            # Common steps might include:
-            # 1. Select provincia
-            # 2. Select oficina
-            # 3. Select tipo de tramite
-            # 4. Check for available appointments
+            logger.info("Successfully navigated past provincia selection")
             
-            logger.info("Form navigation would continue here...")
-            logger.info("Note: Specific form interactions need to be implemented based on website structure")
+            # Step 2: Select oficina
+            if not self.select_oficina():
+                logger.error("Failed to select oficina")
+                return False
             
+            # Step 3: Select tramite
+            if not self.select_tramite():
+                logger.error("Failed to select tramite")
+                return False
+            
+            logger.info("✓ All selections complete, ready to check availability")
             return True
             
         except Exception as e:
@@ -224,46 +529,122 @@ class CitaChecker:
         logger.info("Checking for cita availability...")
         
         try:
-            # Navigate to the form
+            # Navigate to the form (provincia, oficina, tramite)
             if not self.navigate_to_appointment_form():
                 return "ERROR"
             
-            # Look for availability indicators
-            # These selectors are examples and need to be adjusted based on actual website
-            availability_indicators = {
-                "available": [
-                    "hay citas disponibles",
-                    "citas disponibles",
-                    "disponible",
-                    "appointment available"
-                ],
-                "not_available": [
-                    "no hay citas disponibles",
-                    "sin citas",
-                    "no disponible",
-                    "no appointments"
-                ]
-            }
+            # Now we should be on a page where we need to click the Cl@ve/eIdentifier button
+            # Wait for page to load (can take a few minutes according to user)
+            # Also mimicking human behavior - a real user would look at the page before clicking
+            logger.info("Waiting for authentication page to load (this can take a few minutes)...")
+            time.sleep(15)  # Longer delay to mimic human reading the page
+            self.take_screenshot("auth-page")
             
-            # Get page text
-            page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
-            logger.info(f"Page text preview: {page_text[:200]}...")
+            # Try to find and click the eIdentifier/Cl@ve button
+            # User said: button with onclick="JAVASCRIPT:selectedIdP('AFIRMA');idpRedirect.submit();"
+            # containing span with text "Access eIdentifier"
+            if self.use_clave:
+                try:
+                    logger.info("Looking for Cl@ve/eIdentifier authentication button...")
+                    
+                    # Try multiple strategies to find the button
+                    # Strategy A: Cl@ve button (div with onclick)
+                    try:
+                        if self.wait_and_click(By.XPATH, '//*[@id="btnAccesoClave"]', timeout=30):
+                            logger.info("✓ Clicked Cl@ve (btnAccesoClave)")
+                            time.sleep(5)  # Longer delay after clicking to mimic human behavior
+                            self.take_screenshot("after-clave")
+                        else:
+                            logger.info("Cl@ve button not found via XPath, trying eIdentifier XPath")
+                    except Exception as e:
+                        logger.warning(f"Error clicking Cl@ve XPath: {e}")
+
+                    # Strategy B: eIdentifier - find the span and click its parent button
+                    try:
+                        # Provided XPath points at the span; get its parent button
+                        span_elem = WebDriverWait(self.driver, 10).until(
+                            EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div[2]/div/div/div/article[2]/div[4]/button/span[1]'))
+                        )
+                        # parent button
+                        parent_button = span_elem.find_element(By.XPATH, '..')
+                        parent_button.click()
+                        logger.info("✓ Clicked eIdentifier parent button")
+                        time.sleep(5)  # Longer delay after clicking to mimic human behavior
+                        self.take_screenshot("after-eidentifier")
+                    except Exception as e:
+                        logger.warning(f"Could not click eIdentifier button via provided XPath: {e}")
+                    
+                    # Wait for certificate prompt or next page
+                    logger.info("Waiting for certificate prompt or availability page...")
+                    time.sleep(10)
+                    self.take_screenshot("final-page")
+                    
+                except Exception as e:
+                    logger.warning(f"Error clicking authentication button: {e}, continuing...")
             
-            # Check for availability
-            for phrase in availability_indicators["available"]:
-                if phrase.lower() in page_text:
-                    logger.info(f"✓ Found availability indicator: '{phrase}'")
-                    self.take_screenshot("cita-available")
-                    return "AVAILABLE"
+            # Now check for availability on the final page
+            # According to user: if "En este momento no hay citas disponibles" appears = not available
+            # Otherwise, if no error on page = available
             
-            for phrase in availability_indicators["not_available"]:
-                if phrase.lower() in page_text:
-                    logger.info(f"○ Found no-availability indicator: '{phrase}'")
+            # Prefer checking the 'warning' div if present
+            try:
+                warning_div = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, '//*[@id="warning"]'))
+                )
+                warning_text = warning_div.text.lower()
+                logger.info(f"Warning div text preview: {warning_text[:500]}...")
+                if "en este momento no hay citas disponibles" in warning_text:
+                    logger.info("○ Found 'no hay citas disponibles' message in #warning")
                     self.take_screenshot("cita-not-available")
                     return "NOT_AVAILABLE"
+            except Exception:
+                logger.info("No #warning div found or unable to read it; falling back to full page text")
+
+            page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
+            logger.info(f"Final page text preview: {page_text[:500]}...")
             
-            # If we can't determine, take a screenshot for manual review
-            logger.warning("⚠ Could not determine availability automatically")
+            # Check for various error conditions first
+            error_indicators = [
+                "the requested url was rejected",
+                "url was rejected",
+                "error",
+                "exception",
+                "support id",
+                "consult with your administrador",
+                "go back"
+            ]
+            
+            for error_indicator in error_indicators:
+                if error_indicator in page_text:
+                    logger.warning(f"⚠ Found error indicator: '{error_indicator}'")
+                    self.take_screenshot("availability-error")
+                    return "ERROR"
+            
+            # Check for "no citas disponibles" message
+            if "en este momento no hay citas disponibles" in page_text:
+                logger.info("○ Found 'no hay citas disponibles' message")
+                self.take_screenshot("cita-not-available")
+                return "NOT_AVAILABLE"
+            
+            # Only if we have positive indicators of availability, mark as AVAILABLE
+            # Look for appointment-related keywords that suggest we're on the right page
+            positive_indicators = [
+                "solicitar cita",
+                "seleccione fecha",
+                "citas disponibles",
+                "reservar cita",
+                "calendario"
+            ]
+            
+            has_positive_indicator = any(indicator in page_text for indicator in positive_indicators)
+            
+            if has_positive_indicator:
+                logger.info("✓ Found positive availability indicators - cita may be AVAILABLE")
+                self.take_screenshot("cita-available")
+                return "AVAILABLE"
+            
+            # If we don't see clear positive or negative indicators, treat as ERROR
+            logger.warning("⚠ Could not determine availability status - no clear indicators found")
             self.take_screenshot("availability-unknown")
             return "ERROR"
             
@@ -286,6 +667,12 @@ class CitaChecker:
             # Setup browser
             if not self.setup_firefox():
                 logger.error("Failed to setup Firefox")
+                logger.error("CRITICAL: Cannot proceed without working browser")
+                return "ERROR"
+            
+            # Verify driver is working
+            if not self.driver:
+                logger.error("CRITICAL: Driver is None after setup")
                 return "ERROR"
             
             # Check availability
@@ -294,68 +681,89 @@ class CitaChecker:
             logger.info(f"Check result: {result}")
             return result
             
+        except Exception as e:
+            logger.error(f"CRITICAL: Unhandled exception in run(): {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return "ERROR"
+            
         finally:
             # Cleanup
             if self.driver:
-                logger.info("Closing browser...")
-                self.driver.quit()
-
+                try:
+                    logger.info("Closing browser...")
+                    self.driver.quit()
+                except Exception as e:
+                    logger.error(f"Error closing browser: {e}")
 
 def main():
     """Main entry point."""
     
-    # Check if Selenium is available
-    if not SELENIUM_AVAILABLE:
-        logger.error("Selenium is not installed!")
-        logger.error("Please install: pip install selenium")
-        logger.error("And install geckodriver: https://github.com/mozilla/geckodriver/releases")
-        sys.exit(1)
-    
-    # Parse arguments
-    parser = argparse.ArgumentParser(
-        description="Check for available appointments at Spanish police office"
-    )
-    parser.add_argument(
-        "-p", "--provincia",
-        required=True,
-        help="Province name (e.g., 'Barcelona', 'Madrid')"
-    )
-    parser.add_argument(
-        "-o", "--oficina",
-        required=True,
-        help="Police office name"
-    )
-    parser.add_argument(
-        "-t", "--tramite",
-        required=True,
-        help="Type of appointment (e.g., 'POLICIA-TOMA DE HUELLAS')"
-    )
-    parser.add_argument(
-        "--no-clave",
-        action="store_true",
-        help="Don't use Cl@ve authentication"
-    )
-    
-    args = parser.parse_args()
-    
-    # Create checker
-    checker = CitaChecker(
-        provincia=args.provincia,
-        oficina=args.oficina,
-        tramite=args.tramite,
-        use_clave=not args.no_clave
-    )
-    
-    # Run check
-    result = checker.run()
-    
-    # Exit with appropriate code
-    if result == "AVAILABLE":
-        sys.exit(0)  # Success - cita available
-    elif result == "NOT_AVAILABLE":
-        sys.exit(1)  # No cita available
-    else:
-        sys.exit(2)  # Error or manual check required
+    try:
+        # Check if Selenium is available
+        if not SELENIUM_AVAILABLE:
+            logger.error("Selenium is not installed!")
+            logger.error("Please install: pip install selenium")
+            logger.error("And install geckodriver: https://github.com/mozilla/geckodriver/releases")
+            sys.exit(1)
+        
+        # Parse arguments
+        parser = argparse.ArgumentParser(
+            description="Check for available appointments at Spanish police office"
+        )
+        parser.add_argument(
+            "-p", "--provincia",
+            required=True,
+            help="Province name (e.g., 'Barcelona', 'Madrid')"
+        )
+        parser.add_argument(
+            "-o", "--oficina",
+            required=True,
+            help="Police office name"
+        )
+        parser.add_argument(
+            "-t", "--tramite",
+            required=True,
+            help="Type of appointment (e.g., 'POLICIA-TOMA DE HUELLAS')"
+        )
+        parser.add_argument(
+            "--no-clave",
+            action="store_true",
+            help="Don't use Cl@ve authentication"
+        )
+        
+        args = parser.parse_args()
+        
+        # Create checker
+        checker = CitaChecker(
+            provincia=args.provincia,
+            oficina=args.oficina,
+            tramite=args.tramite,
+            use_clave=not args.no_clave
+        )
+        
+        # Run check
+        result = checker.run()
+        
+        # Exit with appropriate code
+        if result == "AVAILABLE":
+            logger.info("EXIT CODE: 0 (CITA AVAILABLE)")
+            sys.exit(0)  # Success - cita available
+        elif result == "NOT_AVAILABLE":
+            logger.info("EXIT CODE: 1 (NO CITA)")
+            sys.exit(1)  # No cita available
+        else:
+            logger.error("EXIT CODE: 2 (ERROR)")
+            sys.exit(2)  # Error or manual check required
+            
+    except SystemExit:
+        # Re-raise sys.exit() calls
+        raise
+    except Exception as e:
+        logger.error(f"FATAL: Unhandled exception in main(): {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        sys.exit(2)
 
 
 if __name__ == "__main__":

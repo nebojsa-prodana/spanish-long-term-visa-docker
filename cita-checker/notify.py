@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 VNC_URL = "http://localhost:8080/vnc.html"
-CITA_URL = "https://icp.administracionelectronica.gob.es/icpplustieb"
+CITA_URL = "https://icp.administracionelectronica.gob.es/icpplus/index.html"
 
 
 def send_email(to_email, smtp_server, smtp_port, smtp_user, smtp_pass, provincia):

@@ -87,32 +87,37 @@ RUN chmod +x /usr/local/bin/setup-autofirma-protocol.sh && \
 RUN apt-get update && apt-get install -y libnss-extrausers && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# --- Install Python dependencies for cita checker (as root before user switch) ---
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3-pip wget && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir 'selenium==3.14.1' 'urllib3<2.0' twilio
+
+# GeckoDriver 0.16.1 (uses Marionette protocol v2, perfect for Firefox 52)
+RUN wget -q https://github.com/mozilla/geckodriver/releases/download/v0.16.1/geckodriver-v0.16.1-linux64.tar.gz && \
+    tar -xzf geckodriver-v0.16.1-linux64.tar.gz && \
+    mv geckodriver /usr/local/bin/ && \
+    chmod +x /usr/local/bin/geckodriver && \
+    rm geckodriver-v0.16.1-linux64.tar.gz
 # --- User setup ---
 RUN useradd -ms /bin/bash autofirma && \
     echo "autofirma ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+# --- Create workspace directory for scripts (will be mounted) ---
+RUN mkdir -p /workspace/cita-checker && chown -R autofirma:autofirma /workspace
+
+# --- Firefox profile setup ---
+RUN mkdir -p /home/autofirma/.mozilla/firefox && \
+    chmod -R 700 /home/autofirma/.mozilla && \
+    chown -R autofirma:autofirma /home/autofirma/.mozilla
+
+# --- Switch to autofirma user ---
 USER autofirma
 WORKDIR /home/autofirma
 
 # --- Volume for certificates ---
 ENV CERT_DIR=/certs
 VOLUME ["/certs"]
-
-# --- Firefox profile setup (will be enhanced by configure-firefox.sh) ---
-RUN mkdir -p /home/autofirma/.mozilla/firefox && \
-    chmod -R 700 /home/autofirma/.mozilla && chown -R autofirma:autofirma /home/autofirma/.mozilla
-
-# --- Install Python dependencies for cita checker ---
-RUN apt-get update && apt-get install -y python3-pip && \
-    pip3 install selenium twilio && \
-    wget -q https://github.com/mozilla/geckodriver/releases/download/v0.33.0/geckodriver-v0.33.0-linux64.tar.gz && \
-    tar -xzf geckodriver-v0.33.0-linux64.tar.gz && \
-    mv geckodriver /usr/local/bin/ && \
-    chmod +x /usr/local/bin/geckodriver && \
-    rm geckodriver-v0.33.0-linux64.tar.gz && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# --- Create workspace directory for scripts (will be mounted) ---
-RUN mkdir -p /workspace/cita-checker && chown -R autofirma:autofirma /workspace
 
 # --- Volume for cita-checker scripts (can be edited without rebuild) ---
 VOLUME ["/workspace/cita-checker"]

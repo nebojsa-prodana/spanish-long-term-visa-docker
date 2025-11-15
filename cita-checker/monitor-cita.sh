@@ -258,12 +258,19 @@ start_monitor() {
         while true; do
             log_message "Running cita check..."
             
-            # Run the check script
-            if python3 "$CHECK_SCRIPT" \
+            # Run the check script and capture exit code properly
+            # Use PIPESTATUS to get python's exit code, not tee's
+            python3 "$CHECK_SCRIPT" \
                 -p "$provincia" \
                 -o "$oficina" \
-                -t "$tramite" 2>&1 | tee -a "$MONITOR_LOG"; then
-                
+                -t "$tramite" 2>&1 | tee -a "$MONITOR_LOG"
+            
+            # Get the exit code of python3 (first command in pipe), not tee
+            local exit_code=${PIPESTATUS[0]}
+            log_message "Python script exit code: $exit_code"
+            
+            if [ $exit_code -eq 0 ]; then
+                # Exit code 0 = CITA AVAILABLE
                 log_message "${GREEN}✓✓✓ CITA FOUND! ✓✓✓${NC}"
                 log_message "Sending URGENT notifications..."
                 
@@ -303,13 +310,13 @@ start_monitor() {
                 # Stop monitoring after finding cita
                 log_message "Stopping monitor - cita found!"
                 break
+            elif [ $exit_code -eq 1 ]; then
+                # Exit code 1 = NO CITA AVAILABLE
+                log_message "${YELLOW}○ No citas available${NC}"
             else
-                local exit_code=$?
-                if [ $exit_code -eq 1 ]; then
-                    log_message "${YELLOW}○ No citas available${NC}"
-                else
-                    log_message "${YELLOW}⚠ Check completed with warnings${NC}"
-                fi
+                # Exit code 2+ = ERROR
+                log_message "${RED}✗ Check failed with error (exit code: $exit_code)${NC}"
+                log_message "${RED}Check logs for details${NC}"
             fi
             
             # Calculate seconds to sleep
